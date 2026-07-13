@@ -14,7 +14,7 @@ export default function BookCallPage() {
       />
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,_rgba(56,189,248,0.18),_transparent_30%),linear-gradient(180deg,_rgba(2,6,23,0.85)_0%,_rgba(3,7,18,0.94)_50%,_rgba(4,9,20,0.98)_100%)]" />
 
-      <SiteHeader activePage="book-call" />
+      <SiteHeader activePage="bookacall" />
 
       <main className="relative z-10 mx-auto flex w-full max-w-5xl flex-col gap-10 px-4 pb-16 pt-8 sm:px-6 lg:px-8">
         

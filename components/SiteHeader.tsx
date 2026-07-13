@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-type PageKey = "home" | "calculator" | "compliance";
+type PageKey = "home" | "calculator" | "compliance"|"bookacall";
 
 type SiteHeaderProps = {
   activePage: PageKey;
