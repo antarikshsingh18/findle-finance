@@ -1,0 +1,15 @@
+import { put } from '@vercel/blob';
+import { NextResponse } from 'next/server';
+
+export async function POST(request: Request): Promise<NextResponse> {
+  const { searchParams } = new URL(request.url);
+  const filename = searchParams.get('filename') || 'unnamed-document';
+
+
+  
+  const blob = await put(filename, request.body!, {
+    access: 'private', // Keeps files hidden from the public web
+  });
+
+  return NextResponse.json(blob);
+}
