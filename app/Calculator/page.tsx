@@ -1,237 +1,502 @@
 "use client";
 
 import React, { useMemo, useState } from "react";
-import Link from "next/link";
-import { motion } from "framer-motion";
-import { ArrowRight, BadgeCheck, Calculator, ShieldCheck, Sparkles } from "lucide-react";
 import SiteHeader from "../../components/SiteHeader";
 
-export default function MortgageCalculatorPage() {
-  const [purchasePrice, setPurchasePrice] = useState(780000);
-  const [downPayment, setDownPayment] = useState(20);
-  const [rate, setRate] = useState(5.1);
-  const [termYears, setTermYears] = useState(25);
+type PaymentFrequency =
+  | "monthly"
+  | "semi-monthly"
+  | "bi-weekly"
+  | "accelerated-bi-weekly"
+  | "weekly"
+  | "accelerated-weekly";
 
-  const mortgageAmount = useMemo(() => purchasePrice * (1 - downPayment / 100), [purchasePrice, downPayment]);
-  const monthlyPayment = useMemo(() => {
-    const monthlyRate = rate / 100 / 12;
-    const numberOfPayments = termYears * 12;
+const FREQUENCIES: { value: PaymentFrequency; label: string; perYear: number }[] = [
+  { value: "monthly", label: "Monthly", perYear: 12 },
+  { value: "semi-monthly", label: "Semi-monthly", perYear: 24 },
+  { value: "bi-weekly", label: "Bi-weekly", perYear: 26 },
+  { value: "accelerated-bi-weekly", label: "Accelerated bi-weekly", perYear: 26 },
+  { value: "weekly", label: "Weekly", perYear: 52 },
+  { value: "accelerated-weekly", label: "Accelerated weekly", perYear: 52 },
+];
 
-    if (monthlyRate === 0) {
-      return Math.round(mortgageAmount / numberOfPayments);
+const currency = (n: number) =>
+  new Intl.NumberFormat("en-CA", {
+    style: "currency",
+    currency: "CAD",
+    maximumFractionDigits: 2,
+  }).format(isFinite(n) ? n : 0);
+
+function cmhcRate(ltv: number): number {
+  if (ltv <= 0.65) return 0.006;
+  if (ltv <= 0.75) return 0.017;
+  if (ltv <= 0.8) return 0.024;
+  if (ltv <= 0.85) return 0.028;
+  if (ltv <= 0.9) return 0.031;
+  if (ltv <= 0.95) return 0.04;
+  return 0;
+}
+
+function calcPayment(principal: number, annualRate: number, years: number, perYear: number) {
+  const semiAnnual = annualRate / 2;
+  const periodic = Math.pow(1 + semiAnnual, 2 / perYear) - 1;
+  const n = years * perYear;
+  if (periodic === 0) return principal / n;
+  return (principal * periodic) / (1 - Math.pow(1 + periodic, -n));
+}
+
+// --- Land transfer tax helpers -------------------------------------------------
+
+type Bracket = { upTo: number; rate: number };
+
+function bracketTax(amount: number, brackets: Bracket[]): number {
+  let tax = 0;
+  let last = 0;
+  for (const b of brackets) {
+    if (amount > last) {
+      const taxable = Math.min(amount, b.upTo) - last;
+      tax += taxable * b.rate;
+      last = b.upTo;
+    } else {
+      break;
+    }
+  }
+  return tax;
+}
+
+const ONTARIO_LTT_BRACKETS: Bracket[] = [
+  { upTo: 55_000, rate: 0.005 },
+  { upTo: 250_000, rate: 0.01 },
+  { upTo: 400_000, rate: 0.015 },
+  { upTo: 2_000_000, rate: 0.02 },
+  { upTo: Infinity, rate: 0.025 },
+];
+
+const TORONTO_MLTT_BRACKETS: Bracket[] = [
+  { upTo: 55_000, rate: 0.005 },
+  { upTo: 250_000, rate: 0.01 },
+  { upTo: 400_000, rate: 0.015 },
+  { upTo: 2_000_000, rate: 0.02 },
+  { upTo: 3_000_000, rate: 0.025 },
+  { upTo: 4_000_000, rate: 0.035 },
+  { upTo: 5_000_000, rate: 0.045 },
+  { upTo: 10_000_000, rate: 0.055 },
+  { upTo: 20_000_000, rate: 0.065 },
+  { upTo: Infinity, rate: 0.075 },
+];
+
+const ONTARIO_FTHB_REBATE_CAP = 4_000;
+const TORONTO_FTHB_REBATE_CAP = 4_475;
+
+export default function ProfessionalCalculatorPage() {
+  const [price, setPrice] = useState("750000");
+  const [downPayment, setDownPayment] = useState("150000");
+  const [rate, setRate] = useState("4.79");
+  const [amortization, setAmortization] = useState(25);
+  const [frequency, setFrequency] = useState<PaymentFrequency>("monthly");
+  const [term, setTerm] = useState(5);
+
+  // Closing cost inputs
+  const [isToronto, setIsToronto] = useState(false);
+  const [isFirstTimeBuyer, setIsFirstTimeBuyer] = useState(false);
+  const [legalFees, setLegalFees] = useState("1800");
+  const [titleInsurance, setTitleInsurance] = useState("300");
+  const [homeInspection, setHomeInspection] = useState("500");
+  const [adjustments, setAdjustments] = useState("500");
+
+  // Monthly expense inputs
+  const [propertyTaxRate, setPropertyTaxRate] = useState("1.0");
+  const [homeInsuranceMonthly, setHomeInsuranceMonthly] = useState("100");
+  const [utilitiesMonthly, setUtilitiesMonthly] = useState("150");
+  const [condoFeesMonthly, setCondoFeesMonthly] = useState("0");
+
+  const result = useMemo(() => {
+    const parsedPrice = parseFloat(price) || 0;
+    const parsedDownPayment = parseFloat(downPayment) || 0;
+    const parsedRate = parseFloat(rate) || 0;
+
+    const dpPct = parsedPrice > 0 ? parsedDownPayment / parsedPrice : 0;
+    const ltv = 1 - dpPct;
+    const baseLoan = Math.max(parsedPrice - parsedDownPayment, 0);
+    const insurable = dpPct < 0.2 && dpPct >= 0.05 && parsedPrice < 1_000_000;
+    const premium = insurable ? baseLoan * cmhcRate(ltv) : 0;
+    const totalMortgage = baseLoan + premium;
+    const freq = FREQUENCIES.find((f) => f.value === frequency)!;
+
+    let payment: number;
+    if (frequency === "accelerated-bi-weekly") {
+      const monthly = calcPayment(totalMortgage, parsedRate / 100, amortization, 12);
+      payment = monthly / 2;
+    } else if (frequency === "accelerated-weekly") {
+      const monthly = calcPayment(totalMortgage, parsedRate / 100, amortization, 12);
+      payment = monthly / 4;
+    } else {
+      payment = calcPayment(totalMortgage, parsedRate / 100, amortization, freq.perYear);
     }
 
-    return Math.round(
-      (mortgageAmount * monthlyRate) / (1 - Math.pow(1 + monthlyRate, -numberOfPayments))
-    );
-  }, [mortgageAmount, rate, termYears]);
+    const semiAnnual = parsedRate / 100 / 2;
+    const periodic = Math.pow(1 + semiAnnual, 2 / freq.perYear) - 1;
+    const periodsInTerm = Math.round(term * freq.perYear);
+    let balance = totalMortgage;
+    let interestPaid = 0;
+    let principalPaid = 0;
 
-  const totalInterest = useMemo(() => monthlyPayment * termYears * 12 - mortgageAmount, [monthlyPayment, mortgageAmount, termYears]);
+    for (let i = 0; i < periodsInTerm && balance > 0; i++) {
+      const interest = balance * periodic;
+      const principalPart = Math.min(payment - interest, balance);
+      interestPaid += interest;
+      principalPaid += principalPart;
+      balance -= principalPart;
+    }
+
+    // --- Cash needed to close ---
+    const provincialLTT = bracketTax(parsedPrice, ONTARIO_LTT_BRACKETS);
+    const municipalLTT = isToronto ? bracketTax(parsedPrice, TORONTO_MLTT_BRACKETS) : 0;
+    const provincialRebate = isFirstTimeBuyer ? Math.min(provincialLTT, ONTARIO_FTHB_REBATE_CAP) : 0;
+    const municipalRebate =
+      isFirstTimeBuyer && isToronto ? Math.min(municipalLTT, TORONTO_FTHB_REBATE_CAP) : 0;
+    const netLTT = provincialLTT - provincialRebate + municipalLTT - municipalRebate;
+
+    const legalFeesNum = parseFloat(legalFees) || 0;
+    const titleInsuranceNum = parseFloat(titleInsurance) || 0;
+    const homeInspectionNum = parseFloat(homeInspection) || 0;
+    const adjustmentsNum = parseFloat(adjustments) || 0;
+
+    const cashToClose =
+      parsedDownPayment +
+      netLTT +
+      legalFeesNum +
+      titleInsuranceNum +
+      homeInspectionNum +
+      adjustmentsNum;
+
+    // --- Monthly expenses ---
+    const monthlyMortgage = (payment * freq.perYear) / 12;
+    const propertyTaxMonthly = (parsedPrice * ((parseFloat(propertyTaxRate) || 0) / 100)) / 12;
+    const homeInsuranceNum = parseFloat(homeInsuranceMonthly) || 0;
+    const utilitiesNum = parseFloat(utilitiesMonthly) || 0;
+    const condoFeesNum = parseFloat(condoFeesMonthly) || 0;
+    const totalMonthlyExpenses =
+      monthlyMortgage + propertyTaxMonthly + homeInsuranceNum + utilitiesNum + condoFeesNum;
+
+    return {
+      payment,
+      premium,
+      totalMortgage,
+      dpPct,
+      balanceEndTerm: Math.max(balance, 0),
+      interestPaid,
+      principalPaid,
+      insurable,
+      // closing costs
+      provincialLTT,
+      municipalLTT,
+      provincialRebate,
+      municipalRebate,
+      netLTT,
+      legalFeesNum,
+      titleInsuranceNum,
+      homeInspectionNum,
+      adjustmentsNum,
+      cashToClose,
+      // monthly expenses
+      monthlyMortgage,
+      propertyTaxMonthly,
+      homeInsuranceNum,
+      utilitiesNum,
+      condoFeesNum,
+      totalMonthlyExpenses,
+    };
+  }, [
+    price,
+    downPayment,
+    rate,
+    amortization,
+    frequency,
+    term,
+    isToronto,
+    isFirstTimeBuyer,
+    legalFees,
+    titleInsurance,
+    homeInspection,
+    adjustments,
+    propertyTaxRate,
+    homeInsuranceMonthly,
+    utilitiesMonthly,
+    condoFeesMonthly,
+  ]);
 
   return (
-    <div className="relative min-h-screen overflow-hidden text-slate-100 selection:bg-sky-500/30">
+    <div className="relative min-h-screen overflow-hidden text-slate-100">
       <div
         className="absolute inset-0 bg-cover bg-center"
         style={{ backgroundImage: "url('/background.jpg')" }}
       />
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,_rgba(56,189,248,0.18),_transparent_35%),linear-gradient(135deg,_rgba(2,6,23,0.9)_0%,_rgba(7,20,37,0.82)_45%,_rgba(3,7,18,0.95)_100%)] backdrop-blur-[2px]" />
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,_rgba(56,189,248,0.18),_transparent_30%),linear-gradient(180deg,_rgba(2,6,23,0.85)_0%,_rgba(3,7,18,0.94)_50%,_rgba(4,9,20,0.98)_100%)]" />
 
       <SiteHeader activePage="calculator" />
 
-      <main className="relative z-10 mx-auto flex w-full max-w-7xl flex-col gap-8 px-4 pb-16 pt-6 sm:px-6 lg:px-8">
-        <motion.section
-          initial={{ opacity: 0, y: 24 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4 }}
-          className="grid gap-8 rounded-[32px] border border-white/10 bg-slate-950/60 p-6 shadow-[0_20px_80px_rgba(2,8,23,0.35)] backdrop-blur-xl lg:grid-cols-[0.95fr_1.05fr] lg:p-10"
-        >
-          <div>
-            <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-sky-400/20 bg-sky-500/10 px-3 py-1 text-sm text-sky-200">
-              <Sparkles size={16} />
-              Smart planning for confident buyers
-            </div>
-            <h1 className="max-w-2xl text-4xl font-semibold tracking-tight text-white sm:text-5xl">
-              Mortgage clarity with <span className="text-sky-300">beautiful precision</span>.
-            </h1>
-            <p className="mt-5 max-w-xl text-lg leading-8 text-slate-300">
-              Explore realistic monthly payments, compare financing scenarios, and see how each adjustment changes your long-term position.
-            </p>
-
-            <div className="mt-8 grid gap-3 sm:grid-cols-2">
-              <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-                <p className="text-sm text-slate-400">Estimated monthly</p>
-                <p className="mt-2 text-3xl font-semibold text-white">${monthlyPayment.toLocaleString()}</p>
-              </div>
-              <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-                <p className="text-sm text-slate-400">Estimated interest</p>
-                <p className="mt-2 text-3xl font-semibold text-white">${totalInterest.toLocaleString()}</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="rounded-[28px] border border-sky-400/20 bg-slate-950/80 p-6 shadow-[0_10px_50px_rgba(56,189,248,0.18)] backdrop-blur">
-            <div className="mb-6 flex items-center justify-between">
-              <div className="flex items-center gap-2 text-sky-300">
-                <Calculator size={18} />
-                <h2 className="text-lg font-semibold text-white">Mortgage calculator</h2>
-              </div>
-              <span className="rounded-full bg-emerald-500/15 px-3 py-1 text-xs font-medium text-emerald-300">
-                Live estimate
-              </span>
-            </div>
-
-            <div className="space-y-6">
-              <div>
-                <div className="mb-2 flex items-center justify-between">
-                  <label className="text-[11px] font-semibold uppercase tracking-[0.25em] text-slate-400">Purchase price</label>
-                  <span className="text-sm font-medium text-slate-200">${purchasePrice.toLocaleString()}</span>
-                </div>
-                <input
-                  type="range"
-                  min="300000"
-                  max="1800000"
-                  step="10000"
-                  value={purchasePrice}
-                  onChange={(event) => setPurchasePrice(Number(event.target.value))}
-                  className="h-2 w-full cursor-pointer appearance-none rounded-full bg-slate-800 accent-sky-500"
-                />
-              </div>
-
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div>
-                  <div className="mb-2 flex items-center justify-between">
-                    <label className="text-[11px] font-semibold uppercase tracking-[0.25em] text-slate-400">Down payment</label>
-                    <span className="text-sm font-medium text-slate-200">{downPayment}%</span>
-                  </div>
-                  <input
-                    type="range"
-                    min="5"
-                    max="40"
-                    step="1"
-                    value={downPayment}
-                    onChange={(event) => setDownPayment(Number(event.target.value))}
-                    className="h-2 w-full cursor-pointer appearance-none rounded-full bg-slate-800 accent-sky-500"
-                  />
-                </div>
-
-                <div>
-                  <div className="mb-2 flex items-center justify-between">
-                    <label className="text-[11px] font-semibold uppercase tracking-[0.25em] text-slate-400">Interest rate</label>
-                    <span className="text-sm font-medium text-slate-200">{rate.toFixed(1)}%</span>
-                  </div>
-                  <input
-                    type="range"
-                    min="2"
-                    max="8"
-                    step="0.1"
-                    value={rate}
-                    onChange={(event) => setRate(Number(event.target.value))}
-                    className="h-2 w-full cursor-pointer appearance-none rounded-full bg-slate-800 accent-sky-500"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <div className="mb-2 flex items-center justify-between">
-                  <label className="text-[11px] font-semibold uppercase tracking-[0.25em] text-slate-400">Loan term</label>
-                  <span className="text-sm font-medium text-slate-200">{termYears} years</span>
-                </div>
-                <input
-                  type="range"
-                  min="10"
-                  max="35"
-                  step="5"
-                  value={termYears}
-                  onChange={(event) => setTermYears(Number(event.target.value))}
-                  className="h-2 w-full cursor-pointer appearance-none rounded-full bg-slate-800 accent-sky-500"
-                />
-              </div>
-            </div>
-
-            <div className="mt-6 rounded-2xl border border-sky-400/15 bg-slate-900/80 p-4">
-              <div className="flex items-center justify-between text-sm text-slate-300">
-                <span>Estimated monthly</span>
-                <span className="text-xl font-semibold text-white">${monthlyPayment.toLocaleString()}</span>
-              </div>
-              <div className="mt-3 grid gap-3 text-sm sm:grid-cols-2">
-                <div className="rounded-xl bg-white/5 p-3">
-                  <p className="text-slate-400">Down payment</p>
-                  <p className="mt-1 font-semibold text-slate-100">${(purchasePrice * (downPayment / 100)).toLocaleString()}</p>
-                </div>
-                <div className="rounded-xl bg-white/5 p-3">
-                  <p className="text-slate-400">Loan amount</p>
-                  <p className="mt-1 font-semibold text-slate-100">${mortgageAmount.toLocaleString()}</p>
-                </div>
-              </div>
-            </div>
-          </div>
-        </motion.section>
-
-        <motion.section
-          id="benefits"
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4, delay: 0.08 }}
-          className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]"
-        >
-          <div className="rounded-[28px] border border-white/10 bg-slate-950/60 p-7 shadow-[0_15px_45px_rgba(2,8,23,0.25)]">
-            <div className="mb-4 flex items-center gap-2 text-sky-300">
-              <ShieldCheck size={20} />
-              <p className="text-sm font-semibold uppercase tracking-[0.24em] text-sky-200">
-                Confidence built in
-              </p>
-            </div>
-            <h3 className="text-2xl font-semibold text-white">Move through the numbers with calm clarity.</h3>
-            <p className="mt-3 text-sm leading-7 text-slate-400">
-              Every metric stays readable and actionable so you can understand how deposit size, interest rate, and term length influence the bigger picture.
-            </p>
-          </div>
-
-          <div className="rounded-[28px] border border-sky-400/20 bg-gradient-to-br from-sky-500/10 via-slate-950/70 to-slate-950/90 p-7 shadow-[0_15px_45px_rgba(2,8,23,0.25)]">
-            <div className="mb-4 flex items-center gap-2 text-sky-300">
-              <BadgeCheck size={20} />
-              <p className="text-sm font-semibold uppercase tracking-[0.24em] text-sky-200">What you can explore</p>
-            </div>
-            <ul className="space-y-3 text-sm text-slate-300">
-              {[
-                "See how a higher deposit lowers monthly pressure",
-                "Compare term lengths to balance affordability and long-term cost",
-                "Understand the trade-off between rate and repayment speed",
-              ].map((item) => (
-                <li key={item} className="flex items-start gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
-                  <BadgeCheck className="mt-0.5 shrink-0 text-sky-300" size={16} />
-                  <span>{item}</span>
-                </li>
-              ))}
-            </ul>
-            <Link
-              href="/"
-              className="mt-6 inline-flex items-center gap-2 rounded-full bg-sky-500 px-5 py-3 text-sm font-semibold text-white transition hover:bg-sky-400"
-            >
-              Return to homepage <ArrowRight size={16} />
-            </Link>
-          </div>
-        </motion.section>
-      </main>
-      <footer className="relative z-10 border-t border-white/10 bg-slate-950/70">
-        <div className="mx-auto flex max-w-7xl flex-col gap-6 px-6 py-8 md:flex-row md:items-center md:justify-between lg:px-8">
-          <div className="flex items-center gap-3">
-            <Link href="/" className="flex items-center">
-            <img
-              src="/findlefinance2.png"
-              alt="Findle Finance"
-              className="h-30 w-auto max-w-[260px] object-contain opacity-90 transition-all duration-300 hover:scale-[1.02] hover:opacity-100 sm:h-32 md:h-40 lg:h-45"
-            />
-          </Link>
-          </div>
-
-          <div className="flex flex-wrap gap-4 text-sm text-slate-400">
-            <a href="/Calculator" className="transition hover:text-sky-300">Calculator</a>
-            <a href="/compliance" className="transition hover:text-sky-300">Compliance</a>
-            <a href="#about" className="transition hover:text-sky-300">Contact</a>
-          </div>
+      <main className="relative z-10 mx-auto max-w-6xl px-4 py-10 lg:py-12">
+        <div className="mb-8 text-center">
+          <h1 className="mb-4 text-4xl font-bold text-white">Mortgage Payment Calculator</h1>
+          <p className="mx-auto max-w-2xl text-slate-400">
+            Estimate your regular mortgage payments, include CMHC insurance when applicable,
+            and review your balance over the selected term.
+          </p>
         </div>
-      </footer>
+
+        <div className="grid gap-6 lg:grid-cols-5">
+          <section className="rounded-3xl border border-white/10 bg-slate-900/60 p-6 shadow-xl lg:col-span-3">
+            <h2 className="mb-5 text-xl font-semibold text-white">Your Details</h2>
+            <div className="grid gap-5 sm:grid-cols-2">
+              <NumberField label="Home price" value={price} onChange={setPrice} prefix="$" step={1000} />
+              <NumberField
+                label="Down payment"
+                value={downPayment}
+                onChange={setDownPayment}
+                prefix="$"
+                step={1000}
+                helper={`${(result.dpPct * 100).toFixed(1)}% of price`}
+              />
+              <NumberField label="Interest rate" value={rate} onChange={setRate} suffix="%" step={0.01} />
+              <SelectField
+                label="Amortization period"
+                value={String(amortization)}
+                onChange={(v) => setAmortization(Number(v))}
+                options={[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30].map((y) => ({ value: String(y), label: `${y} years` }))}
+              />
+              <SelectField
+                label="Payment frequency"
+                value={frequency}
+                onChange={(v) => setFrequency(v as PaymentFrequency)}
+                options={FREQUENCIES.map((f) => ({ value: f.value, label: f.label }))}
+              />
+              <SelectField
+                label="Mortgage term"
+                value={String(term)}
+                onChange={(v) => setTerm(Number(v))}
+                options={[1, 2, 3, 4, 5, 7, 10].map((y) => ({ value: String(y), label: `${y} year${y > 1 ? "s" : ""}` }))}
+              />
+            </div>
+
+            {result.insurable && (
+              <div className="mt-5 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-200">
+                Down payment is less than 20%. CMHC insurance premium of <strong>{currency(result.premium)}</strong> has been added to your mortgage.
+              </div>
+            )}
+          </section>
+
+          <aside className="space-y-4 lg:col-span-2">
+            <div className="rounded-3xl border border-sky-500/20 bg-sky-600/10 p-6 shadow-xl">
+              <p className="text-sm uppercase tracking-[0.3em] text-sky-300">
+                {FREQUENCIES.find((f) => f.value === frequency)?.label} payment
+              </p>
+              <p className="mt-2 text-4xl font-bold text-white">{currency(result.payment)}</p>
+              <div className="mt-4 h-px bg-white/10" />
+              <dl className="mt-4 space-y-2 text-sm">
+                <Row label="Mortgage amount" value={currency(result.totalMortgage)} />
+                <Row label="CMHC insurance" value={currency(result.premium)} />
+                <Row label="Down payment" value={`${currency(parseFloat(downPayment) || 0)} (${(result.dpPct * 100).toFixed(1)}%)`} />
+              </dl>
+            </div>
+
+            <div className="rounded-3xl border border-white/10 bg-slate-900/60 p-6 shadow-xl">
+              <h3 className="text-sm font-semibold uppercase tracking-[0.3em] text-slate-300">
+                Over your {term}-year term
+              </h3>
+              <dl className="mt-3 space-y-2 text-sm">
+                <Row label="Principal paid" value={currency(result.principalPaid)} />
+                <Row label="Interest paid" value={currency(result.interestPaid)} />
+                <Row label="Balance at end of term" value={currency(result.balanceEndTerm)} />
+              </dl>
+            </div>
+          </aside>
+        </div>
+
+        {/* --- Cash Needed to Close & Monthly Expenses --- */}
+        <div className="mt-6 grid gap-6 lg:grid-cols-5">
+          <section className="rounded-3xl border border-white/10 bg-slate-900/60 p-6 shadow-xl lg:col-span-3">
+            <h2 className="mb-5 text-xl font-semibold text-white">Cash Needed to Close</h2>
+
+            <div className="mb-5 flex flex-wrap gap-4">
+              <Toggle label="Property is in Toronto" checked={isToronto} onChange={setIsToronto} />
+              <Toggle label="First-time home buyer" checked={isFirstTimeBuyer} onChange={setIsFirstTimeBuyer} />
+            </div>
+
+            <div className="grid gap-5 sm:grid-cols-2">
+              <NumberField label="Legal fees" value={legalFees} onChange={setLegalFees} prefix="$" step={50} />
+              <NumberField label="Title insurance" value={titleInsurance} onChange={setTitleInsurance} prefix="$" step={25} />
+              <NumberField label="Home inspection" value={homeInspection} onChange={setHomeInspection} prefix="$" step={25} />
+              <NumberField
+                label="Tax / utility adjustments"
+                value={adjustments}
+                onChange={setAdjustments}
+                prefix="$"
+                step={50}
+                helper="Prorated property tax & utilities owed to seller"
+              />
+            </div>
+
+            <p className="mt-4 text-xs text-slate-500">
+              Land transfer tax estimates use current Ontario provincial brackets{isToronto ? " plus Toronto's municipal land transfer tax" : ""}.
+              {isFirstTimeBuyer ? " First-time buyer rebates are applied where eligible." : ""} Actual costs vary — confirm with your lawyer.
+            </p>
+          </section>
+
+          <aside className="space-y-4 lg:col-span-2">
+            <div className="rounded-3xl border border-emerald-500/20 bg-emerald-600/10 p-6 shadow-xl">
+              <p className="text-sm uppercase tracking-[0.3em] text-emerald-300">Estimated cash to close</p>
+              <p className="mt-2 text-4xl font-bold text-white">{currency(result.cashToClose)}</p>
+              <div className="mt-4 h-px bg-white/10" />
+              <dl className="mt-4 space-y-2 text-sm">
+                <Row label="Down payment" value={currency(parseFloat(downPayment) || 0)} />
+                <Row label="Provincial LTT" value={currency(result.provincialLTT)} />
+                {isToronto && <Row label="Toronto municipal LTT" value={currency(result.municipalLTT)} />}
+                {isFirstTimeBuyer && (
+                  <Row
+                    label="First-time buyer rebate"
+                    value={`-${currency(result.provincialRebate + result.municipalRebate)}`}
+                  />
+                )}
+                <Row label="Legal fees" value={currency(result.legalFeesNum)} />
+                <Row label="Title insurance" value={currency(result.titleInsuranceNum)} />
+                <Row label="Home inspection" value={currency(result.homeInspectionNum)} />
+                <Row label="Adjustments" value={currency(result.adjustmentsNum)} />
+              </dl>
+            </div>
+          </aside>
+        </div>
+
+        <div className="mt-6 grid gap-6 lg:grid-cols-5">
+          <section className="rounded-3xl border border-white/10 bg-slate-900/60 p-6 shadow-xl lg:col-span-3">
+            <h2 className="mb-5 text-xl font-semibold text-white">Monthly Expenses</h2>
+            <div className="grid gap-5 sm:grid-cols-2">
+              <NumberField
+                label="Property tax rate"
+                value={propertyTaxRate}
+                onChange={setPropertyTaxRate}
+                suffix="% / yr"
+                step={0.05}
+                helper={`≈ ${currency(result.propertyTaxMonthly)}/mo on this price`}
+              />
+              <NumberField label="Home insurance" value={homeInsuranceMonthly} onChange={setHomeInsuranceMonthly} prefix="$" suffix="/mo" step={10} />
+              <NumberField label="Utilities" value={utilitiesMonthly} onChange={setUtilitiesMonthly} prefix="$" suffix="/mo" step={10} />
+              <NumberField label="Condo / maintenance fees" value={condoFeesMonthly} onChange={setCondoFeesMonthly} prefix="$" suffix="/mo" step={10} />
+            </div>
+          </section>
+
+          <aside className="space-y-4 lg:col-span-2">
+            <div className="rounded-3xl border border-indigo-500/20 bg-indigo-600/10 p-6 shadow-xl">
+              <p className="text-sm uppercase tracking-[0.3em] text-indigo-300">Total monthly cost of ownership</p>
+              <p className="mt-2 text-4xl font-bold text-white">{currency(result.totalMonthlyExpenses)}</p>
+              <div className="mt-4 h-px bg-white/10" />
+              <dl className="mt-4 space-y-2 text-sm">
+                <Row label="Mortgage payment (monthly equiv.)" value={currency(result.monthlyMortgage)} />
+                <Row label="Property tax" value={currency(result.propertyTaxMonthly)} />
+                <Row label="Home insurance" value={currency(result.homeInsuranceNum)} />
+                <Row label="Utilities" value={currency(result.utilitiesNum)} />
+                <Row label="Condo / maintenance fees" value={currency(result.condoFeesNum)} />
+              </dl>
+            </div>
+          </aside>
+        </div>
+      </main>
     </div>
+  );
+}
+
+function Row({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex justify-between gap-4">
+      <dt className="text-slate-400">{label}</dt>
+      <dd className="font-medium text-white">{value}</dd>
+    </div>
+  );
+}
+
+function NumberField({
+  label,
+  value,
+  onChange,
+  prefix,
+  suffix,
+  step = 1,
+  helper,
+}: {
+  label: string;
+  value: number | string;
+  onChange: (value: string) => void;
+  prefix?: string;
+  suffix?: string;
+  step?: number;
+  helper?: string;
+}) {
+  return (
+    <label className="block">
+      <span className="mb-1 block text-sm font-medium text-slate-300">{label}</span>
+      <div className="flex items-center rounded-xl border border-slate-700 bg-slate-950/80 focus-within:border-sky-500 focus-within:ring-1 focus-within:ring-sky-500">
+        {prefix && <span className="pl-3 text-slate-500">{prefix}</span>}
+        <input
+          type="number"
+          value={value}
+          step={step}
+          onChange={(e) => onChange(e.target.value)}
+          className="w-full bg-transparent px-3 py-2.5 text-white outline-none"
+        />
+        {suffix && <span className="pr-3 text-slate-500">{suffix}</span>}
+      </div>
+      {helper && <span className="mt-1 block text-xs text-slate-500">{helper}</span>}
+    </label>
+  );
+}
+
+function SelectField({
+  label,
+  value,
+  onChange,
+  options,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  options: { value: string; label: string }[];
+}) {
+  return (
+    <label className="block">
+      <span className="mb-1 block text-sm font-medium text-slate-300">{label}</span>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="w-full rounded-xl border border-slate-700 bg-slate-950/80 px-3 py-2.5 text-white outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500"
+      >
+        {options.map((o) => (
+          <option key={o.value} value={o.value}>
+            {o.label}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+function Toggle({
+  label,
+  checked,
+  onChange,
+}: {
+  label: string;
+  checked: boolean;
+  onChange: (v: boolean) => void;
+}) {
+  return (
+    <label className="flex cursor-pointer items-center gap-2 rounded-xl border border-slate-700 bg-slate-950/80 px-3 py-2 text-sm text-slate-300">
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={(e) => onChange(e.target.checked)}
+        className="h-4 w-4 accent-sky-500"
+      />
+      {label}
+    </label>
   );
 }
