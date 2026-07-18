@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import SiteHeader from "../../components/SiteHeader";
 
 type PaymentFrequency =
@@ -91,8 +91,9 @@ const TORONTO_FTHB_REBATE_CAP = 4_475;
 export default function ProfessionalCalculatorPage() {
   const [price, setPrice] = useState("750000");
   const [downPayment, setDownPayment] = useState("150000");
-  const [rate, setRate] = useState("4.79");
+  const [rate, setRate] = useState("5");
   const [amortization, setAmortization] = useState(25);
+  const [isDownPaymentAuto, setIsDownPaymentAuto] = useState(true);
   const [frequency, setFrequency] = useState<PaymentFrequency>("monthly");
   const [term, setTerm] = useState(5);
 
@@ -109,6 +110,15 @@ export default function ProfessionalCalculatorPage() {
   const [homeInsuranceMonthly, setHomeInsuranceMonthly] = useState("100");
   const [utilitiesMonthly, setUtilitiesMonthly] = useState("150");
   const [condoFeesMonthly, setCondoFeesMonthly] = useState("0");
+
+  useEffect(() => {
+    if (!isDownPaymentAuto) return;
+
+    const parsedPrice = parseFloat(price) || 0;
+    const parsedRate = parseFloat(rate) || 0;
+    const autoDownPayment = parsedPrice * (parsedRate / 100);
+    setDownPayment(String(Math.round(autoDownPayment)));
+  }, [price, rate, isDownPaymentAuto]);
 
   const result = useMemo(() => {
     const parsedPrice = parseFloat(price) || 0;
@@ -253,12 +263,35 @@ export default function ProfessionalCalculatorPage() {
               <NumberField
                 label="Down payment"
                 value={downPayment}
-                onChange={setDownPayment}
+                onChange={(value) => {
+                  setDownPayment(value);
+                  setIsDownPaymentAuto(false);
+                }}
                 prefix="$"
                 step={1000}
-                helper={`${(result.dpPct * 100).toFixed(1)}% of price`}
+                helper={
+                  isDownPaymentAuto
+                    ? `Auto-set from ${rate}% interest; edit to override`
+                    : `${(result.dpPct * 100).toFixed(1)}% of price`
+                }
               />
-              <NumberField label="Interest rate" value={rate} onChange={setRate} suffix="%" step={0.01} />
+              <NumberField
+                label="CMHC insurance"
+                value={result.premium}
+                prefix="$"
+                step={100}
+                readOnly
+                helper="Auto-calculated from the loan-to-value and price limits"
+              />
+
+              <SelectField
+                label="Interest rate"
+                value={rate}
+                onChange={setRate}
+                options={[5, 10, 15, 20].map((value) => ({ value: String(value), label: `${value}%` }))}
+                className="w-28"
+              />
+
               <SelectField
                 label="Amortization period"
                 value={String(amortization)}
@@ -422,14 +455,16 @@ function NumberField({
   suffix,
   step = 1,
   helper,
+  readOnly = false,
 }: {
   label: string;
   value: number | string;
-  onChange: (value: string) => void;
+  onChange?: (value: string) => void;
   prefix?: string;
   suffix?: string;
   step?: number;
   helper?: string;
+  readOnly?: boolean;
 }) {
   return (
     <label className="block">
@@ -440,8 +475,9 @@ function NumberField({
           type="number"
           value={value}
           step={step}
-          onChange={(e) => onChange(e.target.value)}
-          className="w-full bg-transparent px-3 py-2.5 text-white outline-none"
+          readOnly={readOnly}
+          onChange={(e) => onChange?.(e.target.value)}
+          className={`w-full bg-transparent px-3 py-2.5 text-white outline-none ${readOnly ? "cursor-default" : ""}`.trim()}
         />
         {suffix && <span className="pr-3 text-slate-500">{suffix}</span>}
       </div>
@@ -455,11 +491,13 @@ function SelectField({
   value,
   onChange,
   options,
+  className,
 }: {
   label: string;
   value: string;
   onChange: (v: string) => void;
   options: { value: string; label: string }[];
+  className?: string;
 }) {
   return (
     <label className="block">
@@ -467,7 +505,7 @@ function SelectField({
       <select
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="w-full rounded-xl border border-slate-700 bg-slate-950/80 px-3 py-2.5 text-white outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500"
+        className={`w-full rounded-xl border border-slate-700 bg-slate-950/80 px-3 py-2.5 text-white outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 ${className ?? ""}`.trim()}
       >
         {options.map((o) => (
           <option key={o.value} value={o.value}>
