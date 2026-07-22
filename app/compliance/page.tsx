@@ -139,7 +139,7 @@ export default function CompliancePage() {
           </div>
 
           <div className="flex flex-wrap gap-4 text-sm text-slate-400">
-            <Link href="/" className="transition hover:text-sky-300">Home</Link>
+            <Link href="/blog" className="transition hover:text-sky-300">Blog</Link>
             <Link href="/Calculator" className="transition hover:text-sky-300">Calculator</Link>
             <Link href="/compliance" className="font-semibold text-white">Compliance</Link>
           </div>

@@ -153,7 +153,7 @@ export default function FinanceHomePage() {
           <div className="flex flex-wrap gap-4 text-sm text-slate-400">
             <a href="/Calculator" className="transition hover:text-sky-300">Calculator</a>
             <a href="/compliance" className="transition hover:text-sky-300">Compliance</a>
-            <a href="#about" className="transition hover:text-sky-300">Contact</a>
+            <a href="/blog" className="transition hover:text-sky-300">Blog</a>
           </div>
         </div>
       </footer>

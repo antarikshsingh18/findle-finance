@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-type PageKey = "home" | "calculator" | "compliance" | "bookacall" | "portal";
+type PageKey = "home" | "calculator" | "compliance" | "bookacall" | "portal"| "blog";
 
 type SiteHeaderProps = {
   activePage: PageKey;
@@ -23,6 +23,7 @@ const navItems: Array<{
   },
   { href: "/compliance", label: "Compliance", page: "compliance" },
   { href: "/portal", label: "Portal", page: "portal" },
+  
 ];
 
 export default function SiteHeader({ activePage }: SiteHeaderProps) {
