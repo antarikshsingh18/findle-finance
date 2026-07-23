@@ -28,7 +28,7 @@ const BLOG_POSTS: BlogPost[] = [
     date: 'OCT 12, 2026',
     author: 'FINDLE ADVISORY TEAM',
     isFeatured: true,
-    image: '/background.jpg',
+    image: '/mortgage_stress.jpg',
   },
   {
     id: 'pre-approval-vs-pre-qualification',
@@ -39,7 +39,7 @@ const BLOG_POSTS: BlogPost[] = [
     date: 'SEP 28, 2026',
     author: 'MARCUS VANCE',
     isFeatured: false,
-    image: '/background.jpg',
+    image: '/pre_approval.webp',
   },
   {
     id: 'optimizing-debt-to-income-ratios',
@@ -50,7 +50,7 @@ const BLOG_POSTS: BlogPost[] = [
     date: 'SEP 14, 2026',
     author: 'ELENA ROSTOVA',
     isFeatured: false,
-    image: '/background.jpg',
+    image: '/gds_tds.jpg',
   },
   {
     id: 'fixed-vs-variable-rate-environments',
@@ -61,7 +61,7 @@ const BLOG_POSTS: BlogPost[] = [
     date: 'AUG 30, 2026',
     author: 'FINDLE ADVISORY TEAM',
     isFeatured: false,
-    image: '/background.jpg',
+    image: '/fixed_variable.jpg',
   },
 ];
 
