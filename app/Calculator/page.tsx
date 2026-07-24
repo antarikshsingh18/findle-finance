@@ -45,6 +45,18 @@ function calcPayment(principal: number, annualRate: number, years: number, perYe
   return (principal * periodic) / (1 - Math.pow(1 + periodic, -n));
 }
 
+// --- Canadian Minimum Down Payment Helper ---
+function getMinDownPayment(price: number): number {
+  if (price <= 0) return 0;
+  if (price <= 500_000) {
+    return price * 0.05;
+  } else if (price <= 1_500_000) {
+    return 500_000 * 0.05 + (price - 500_000) * 0.10;
+  } else {
+    return price * 0.20;
+  }
+}
+
 // --- Land transfer tax helpers -------------------------------------------------
 
 type Bracket = { upTo: number; rate: number };
@@ -89,9 +101,11 @@ const ONTARIO_FTHB_REBATE_CAP = 4_000;
 const TORONTO_FTHB_REBATE_CAP = 4_475;
 
 export default function ProfessionalCalculatorPage() {
-  const [price, setPrice] = useState("750000");
-  const [downPayment, setDownPayment] = useState("150000");
-  const [rate, setRate] = useState("5");
+  const [price, setPrice] = useState("");
+  const [downPaymentPct, setDownPaymentPct] = useState("5");
+  const [downPayment, setDownPayment] = useState("");
+  
+  const [rate, setRate] = useState("5.00");
   const [amortization, setAmortization] = useState(25);
   const [isDownPaymentAuto, setIsDownPaymentAuto] = useState(true);
   const [frequency, setFrequency] = useState<PaymentFrequency>("monthly");
@@ -114,11 +128,19 @@ export default function ProfessionalCalculatorPage() {
   useEffect(() => {
     if (!isDownPaymentAuto) return;
 
-    const parsedPrice = parseFloat(price) || 0;
-    const parsedRate = parseFloat(rate) || 0;
-    const autoDownPayment = parsedPrice * (parsedRate / 100);
-    setDownPayment(String(Math.round(autoDownPayment)));
-  }, [price, rate, isDownPaymentAuto]);
+    const parsedPrice = parseFloat(price);
+    if (isNaN(parsedPrice) || parsedPrice <= 0) {
+      setDownPayment("");
+      setDownPaymentPct("5");
+      return;
+    }
+
+    const minDp = getMinDownPayment(parsedPrice);
+    setDownPayment(String(Math.round(minDp)));
+    
+    const effectivePct = (minDp / parsedPrice) * 100;
+    setDownPaymentPct(effectivePct.toFixed(2));
+  }, [price, isDownPaymentAuto]);
 
   const result = useMemo(() => {
     const parsedPrice = parseFloat(price) || 0;
@@ -128,7 +150,7 @@ export default function ProfessionalCalculatorPage() {
     const dpPct = parsedPrice > 0 ? parsedDownPayment / parsedPrice : 0;
     const ltv = 1 - dpPct;
     const baseLoan = Math.max(parsedPrice - parsedDownPayment, 0);
-    const insurable = dpPct < 0.2 && dpPct >= 0.05 && parsedPrice < 1_000_000;
+    const insurable = dpPct < 0.2 && dpPct >= 0.05 && parsedPrice <= 1_500_000;
     const premium = insurable ? baseLoan * cmhcRate(ltv) : 0;
     const totalMortgage = baseLoan + premium;
     const freq = FREQUENCIES.find((f) => f.value === frequency)!;
@@ -198,7 +220,6 @@ export default function ProfessionalCalculatorPage() {
       interestPaid,
       principalPaid,
       insurable,
-      // closing costs
       provincialLTT,
       municipalLTT,
       provincialRebate,
@@ -209,7 +230,6 @@ export default function ProfessionalCalculatorPage() {
       homeInspectionNum,
       adjustmentsNum,
       cashToClose,
-      // monthly expenses
       monthlyMortgage,
       propertyTaxMonthly,
       homeInsuranceNum,
@@ -248,73 +268,160 @@ export default function ProfessionalCalculatorPage() {
 
       <main className="relative z-10 mx-auto max-w-6xl px-4 py-10 lg:py-12">
         <div className="mb-8 text-center">
-          <h1 className="mb-4 text-4xl font-bold text-white">Mortgage Payment Calculator</h1>
+          <div className="inline-block mb-3 px-3 py-1 rounded-full bg-sky-500/10 border border-sky-500/30 text-sky-300 text-xs font-medium tracking-wide uppercase">
+            Interactive Financial Guidance
+          </div>
+          <h1 className="mb-4 text-4xl font-bold text-white">Mortgage & Home Affordability Calculator</h1>
           <p className="mx-auto max-w-2xl text-slate-400">
-            Estimate your regular mortgage payments, include CMHC insurance when applicable,
-            and review your balance over the selected term.
+            Customize your inputs below. We automatically calculate mandatory default insurance (CMHC), land transfer taxes, and closing expenses to give you the complete picture.
           </p>
         </div>
 
         <div className="grid gap-6 lg:grid-cols-5">
           <section className="rounded-3xl border border-white/10 bg-slate-900/60 p-6 shadow-xl lg:col-span-3">
-            <h2 className="mb-5 text-xl font-semibold text-white">Your Details</h2>
-            <div className="grid gap-5 sm:grid-cols-2">
-              <NumberField label="Home price" value={price} onChange={setPrice} prefix="$" step={1000} />
-              <NumberField
-                label="Down payment"
-                value={downPayment}
-                onChange={(value) => {
-                  setDownPayment(value);
-                  setIsDownPaymentAuto(false);
-                }}
-                prefix="$"
+            <div className="flex items-center justify-between mb-5">
+              <h2 className="text-xl font-semibold text-white">1. Mortgage & Loan Structure</h2>
+              <span className="text-xs text-sky-400 bg-sky-500/10 px-2.5 py-1 rounded-lg border border-sky-500/20">Step 1 of 3</span>
+            </div>
+
+            <div className="grid gap-5 sm:grid-cols-2 items-start">
+              {/* Row 1: Left */}
+              <NumberField 
+                label="Home price" 
+                value={price} 
+                onChange={setPrice} 
+                prefix="$" 
                 step={1000}
-                helper={
-                  isDownPaymentAuto
-                    ? `Auto-set from ${rate}% interest; edit to override`
-                    : `${(result.dpPct * 100).toFixed(1)}% of price`
-                }
+                helper="Estimated purchase price of the property"
+                placeholder="e.g. 750000"
               />
+              
+              {/* Row 1: Right (Down Payment Amount & Effective Percentage stacked cleanly) */}
+              <div className="space-y-4">
+                <NumberField
+                  label="Down payment amount"
+                  value={downPayment}
+                  onChange={(value) => {
+                    setDownPayment(value);
+                    setIsDownPaymentAuto(false);
+                  }}
+                  prefix="$"
+                  step={1000}
+                  helper={
+                    !price
+                      ? "Enter a home price first"
+                      : isDownPaymentAuto
+                      ? `Auto-calculated minimum (${(result.dpPct * 100).toFixed(1)}%)`
+                      : `${(result.dpPct * 100).toFixed(2)}% of purchase price`
+                  }
+                  placeholder="e.g. 50000"
+                />
+                
+                <div className="space-y-1.5">
+                  <NumberField
+                    label="Effective down payment percentage"
+                    value={downPaymentPct}
+                    readOnly
+                    suffix="%"
+                    step={0.1}
+                    helper="Calculated based on Canadian tiered minimum rules"
+                  />
+                  {/* Quick-select preset pills */}
+                  <div className="flex flex-wrap gap-1.5 pt-1">
+                    {[10, 15, 20, 25].map((pct) => (
+                      <button
+                        key={pct}
+                        type="button"
+                        onClick={() => {
+                          setIsDownPaymentAuto(false);
+                          const parsedPrice = parseFloat(price) || 0;
+                          setDownPaymentPct(String(pct));
+                          setDownPayment(String(Math.round(parsedPrice * (pct / 100))));
+                        }}
+                        className={`px-2.5 py-1 text-xs rounded-lg border transition-colors ${
+                          Math.round(result.dpPct * 100) === pct && !isDownPaymentAuto
+                            ? "bg-sky-500/20 border-sky-500 text-sky-300 font-medium"
+                            : "bg-slate-950/60 border-slate-700 text-slate-400 hover:border-slate-600 hover:text-slate-200"
+                        }`}
+                      >
+                        {pct}%{pct === 20 ? " (No CMHC)" : ""}
+                      </button>
+                    ))}
+                    <button
+                      type="button"
+                      onClick={() => setIsDownPaymentAuto(true)}
+                      className={`px-2.5 py-1 text-xs rounded-lg border transition-colors ${
+                        isDownPaymentAuto
+                          ? "bg-sky-500/20 border-sky-500 text-sky-300 font-medium"
+                          : "bg-slate-950/60 border-slate-700 text-slate-400 hover:border-slate-600 hover:text-slate-200"
+                      }`}
+                    >
+                      Reset to Minimum
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Row 2: Left */}
               <NumberField
-                label="CMHC insurance"
+                label="CMHC insurance premium"
                 value={result.premium}
                 prefix="$"
                 step={100}
                 readOnly
-                helper="Auto-calculated from the loan-to-value and price limits"
+                helper={
+                  !price
+                    ? "Awaiting home price input"
+                    : result.dpPct < 0.2 
+                    ? "Required for down payments under 20%" 
+                    : "Not required (Down payment is 20%+)"
+                }
               />
 
-              <SelectField
+              {/* Row 2: Right */}
+              <NumberField
                 label="Interest rate"
                 value={rate}
                 onChange={setRate}
-                options={[5, 10, 15, 20].map((value) => ({ value: String(value), label: `${value}%` }))}
-                className="w-28"
+                suffix="%"
+                step={0.05}
+                helper="Your expected annual mortgage rate"
               />
 
+              {/* Row 3: Left */}
               <SelectField
                 label="Amortization period"
                 value={String(amortization)}
                 onChange={(v) => setAmortization(Number(v))}
-                options={[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30].map((y) => ({ value: String(y), label: `${y} years` }))}
+                options={[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30].map((y) => ({ value: String(y), label: `${y} years ${y === 25 ? '(Standard)' : y === 30 ? '(Max insured limit)' : ''}` }))}
               />
+
+              {/* Row 3: Right */}
               <SelectField
                 label="Payment frequency"
                 value={frequency}
                 onChange={(v) => setFrequency(v as PaymentFrequency)}
                 options={FREQUENCIES.map((f) => ({ value: f.value, label: f.label }))}
               />
+
+              {/* Row 4: Left */}
               <SelectField
                 label="Mortgage term"
                 value={String(term)}
                 onChange={(v) => setTerm(Number(v))}
-                options={[1, 2, 3, 4, 5, 7, 10].map((y) => ({ value: String(y), label: `${y} year${y > 1 ? "s" : ""}` }))}
+                options={[1, 2, 3, 4, 5, 7, 10].map((y) => ({ value: String(y), label: `${y} year${y > 1 ? "s" : ""} term` }))}
               />
+
+              <div />
             </div>
 
             {result.insurable && (
-              <div className="mt-5 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-200">
-                Down payment is less than 20%. CMHC insurance premium of <strong>{currency(result.premium)}</strong> has been added to your mortgage.
+              <div className="mt-5 rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-sm text-amber-200 flex items-start gap-3">
+                <span className="text-amber-400 font-bold text-lg leading-none">ℹ️</span>
+                <div>
+                  <strong className="block font-semibold mb-0.5">CMHC Insurance Applied</strong>
+                  Because your down payment is under 20%, a default insurance premium of <strong>{currency(result.premium)}</strong> is rolled directly into your total mortgage loan amount.
+                </div>
               </div>
             )}
           </section>
@@ -327,9 +434,9 @@ export default function ProfessionalCalculatorPage() {
               <p className="mt-2 text-4xl font-bold text-white">{currency(result.payment)}</p>
               <div className="mt-4 h-px bg-white/10" />
               <dl className="mt-4 space-y-2 text-sm">
-                <Row label="Mortgage amount" value={currency(result.totalMortgage)} />
-                <Row label="CMHC insurance" value={currency(result.premium)} />
-                <Row label="Down payment" value={`${currency(parseFloat(downPayment) || 0)} (${(result.dpPct * 100).toFixed(1)}%)`} />
+                <Row label="Total mortgage amount" value={currency(result.totalMortgage)} />
+                <Row label="CMHC insurance added" value={currency(result.premium)} />
+                <Row label="Down payment contribution" value={`${currency(parseFloat(downPayment) || 0)} (${price ? (result.dpPct * 100).toFixed(2) : "0"}%)`} />
               </dl>
             </div>
 
@@ -338,9 +445,9 @@ export default function ProfessionalCalculatorPage() {
                 Over your {term}-year term
               </h3>
               <dl className="mt-3 space-y-2 text-sm">
-                <Row label="Principal paid" value={currency(result.principalPaid)} />
-                <Row label="Interest paid" value={currency(result.interestPaid)} />
-                <Row label="Balance at end of term" value={currency(result.balanceEndTerm)} />
+                <Row label="Principal paid down" value={currency(result.principalPaid)} />
+                <Row label="Interest expenses" value={currency(result.interestPaid)} />
+                <Row label="Estimated balance left" value={currency(result.balanceEndTerm)} />
               </dl>
             </div>
           </aside>
@@ -349,30 +456,32 @@ export default function ProfessionalCalculatorPage() {
         {/* --- Cash Needed to Close & Monthly Expenses --- */}
         <div className="mt-6 grid gap-6 lg:grid-cols-5">
           <section className="rounded-3xl border border-white/10 bg-slate-900/60 p-6 shadow-xl lg:col-span-3">
-            <h2 className="mb-5 text-xl font-semibold text-white">Cash Needed to Close</h2>
-
-            <div className="mb-5 flex flex-wrap gap-4">
-              <Toggle label="Property is in Toronto" checked={isToronto} onChange={setIsToronto} />
-              <Toggle label="First-time home buyer" checked={isFirstTimeBuyer} onChange={setIsFirstTimeBuyer} />
+            <div className="flex items-center justify-between mb-5">
+              <h2 className="text-xl font-semibold text-white">2. Closing Costs & Land Transfer Tax</h2>
+              <span className="text-xs text-emerald-400 bg-emerald-500/10 px-2.5 py-1 rounded-lg border border-emerald-500/20">Step 2 of 3</span>
             </div>
 
-            <div className="grid gap-5 sm:grid-cols-2">
-              <NumberField label="Legal fees" value={legalFees} onChange={setLegalFees} prefix="$" step={50} />
-              <NumberField label="Title insurance" value={titleInsurance} onChange={setTitleInsurance} prefix="$" step={25} />
-              <NumberField label="Home inspection" value={homeInspection} onChange={setHomeInspection} prefix="$" step={25} />
+            <div className="mb-5 flex flex-wrap gap-4">
+              <Toggle label="Property is located in Toronto" checked={isToronto} onChange={setIsToronto} />
+              <Toggle label="First-time home buyer status" checked={isFirstTimeBuyer} onChange={setIsFirstTimeBuyer} />
+            </div>
+
+            <div className="grid gap-5 sm:grid-cols-2 items-start">
+              <NumberField label="Legal fees & disbursements" value={legalFees} onChange={setLegalFees} prefix="$" step={50} helper="Estimated real estate lawyer fees" />
+              <NumberField label="Title insurance" value={titleInsurance} onChange={setTitleInsurance} prefix="$" step={25} helper="One-time protection policy fee" />
+              <NumberField label="Home inspection" value={homeInspection} onChange={setHomeInspection} prefix="$" step={25} helper="Recommended pre-purchase check" />
               <NumberField
                 label="Tax / utility adjustments"
                 value={adjustments}
                 onChange={setAdjustments}
                 prefix="$"
                 step={50}
-                helper="Prorated property tax & utilities owed to seller"
+                helper="Prorated property tax reimbursed to seller"
               />
             </div>
 
             <p className="mt-4 text-xs text-slate-500">
-              Land transfer tax estimates use current Ontario provincial brackets{isToronto ? " plus Toronto's municipal land transfer tax" : ""}.
-              {isFirstTimeBuyer ? " First-time buyer rebates are applied where eligible." : ""} Actual costs vary — confirm with your lawyer.
+              * Land transfer tax calculations use current Ontario provincial thresholds{isToronto ? " alongside Toronto municipal tax tables" : ""}. {isFirstTimeBuyer ? " First-time buyer tax credits have been applied." : ""}
             </p>
           </section>
 
@@ -383,8 +492,8 @@ export default function ProfessionalCalculatorPage() {
               <div className="mt-4 h-px bg-white/10" />
               <dl className="mt-4 space-y-2 text-sm">
                 <Row label="Down payment" value={currency(parseFloat(downPayment) || 0)} />
-                <Row label="Provincial LTT" value={currency(result.provincialLTT)} />
-                {isToronto && <Row label="Toronto municipal LTT" value={currency(result.municipalLTT)} />}
+                <Row label="Provincial Land Transfer Tax" value={currency(result.provincialLTT)} />
+                {isToronto && <Row label="Toronto Municipal LTT" value={currency(result.municipalLTT)} />}
                 {isFirstTimeBuyer && (
                   <Row
                     label="First-time buyer rebate"
@@ -402,19 +511,22 @@ export default function ProfessionalCalculatorPage() {
 
         <div className="mt-6 grid gap-6 lg:grid-cols-5">
           <section className="rounded-3xl border border-white/10 bg-slate-900/60 p-6 shadow-xl lg:col-span-3">
-            <h2 className="mb-5 text-xl font-semibold text-white">Monthly Expenses</h2>
-            <div className="grid gap-5 sm:grid-cols-2">
+            <div className="flex items-center justify-between mb-5">
+              <h2 className="text-xl font-semibold text-white">3. Ongoing Monthly Carrying Costs</h2>
+              <span className="text-xs text-indigo-400 bg-indigo-500/10 px-2.5 py-1 rounded-lg border border-indigo-500/20">Step 3 of 3</span>
+            </div>
+            <div className="grid gap-5 sm:grid-cols-2 items-start">
               <NumberField
                 label="Property tax rate"
                 value={propertyTaxRate}
                 onChange={setPropertyTaxRate}
                 suffix="% / yr"
                 step={0.05}
-                helper={`≈ ${currency(result.propertyTaxMonthly)}/mo on this price`}
+                helper={`Approx. ${currency(result.propertyTaxMonthly)} monthly`}
               />
-              <NumberField label="Home insurance" value={homeInsuranceMonthly} onChange={setHomeInsuranceMonthly} prefix="$" suffix="/mo" step={10} />
-              <NumberField label="Utilities" value={utilitiesMonthly} onChange={setUtilitiesMonthly} prefix="$" suffix="/mo" step={10} />
-              <NumberField label="Condo / maintenance fees" value={condoFeesMonthly} onChange={setCondoFeesMonthly} prefix="$" suffix="/mo" step={10} />
+              <NumberField label="Home insurance" value={homeInsuranceMonthly} onChange={setHomeInsuranceMonthly} prefix="$" suffix="/mo" step={10} helper="Property & casualty coverage" />
+              <NumberField label="Utilities" value={utilitiesMonthly} onChange={setUtilitiesMonthly} prefix="$" suffix="/mo" step={10} helper="Estimated electricity, gas, water" />
+              <NumberField label="Condo / maintenance fees" value={condoFeesMonthly} onChange={setCondoFeesMonthly} prefix="$" suffix="/mo" step={10} helper="Monthly strata/building fees if applicable" />
             </div>
           </section>
 
@@ -424,11 +536,11 @@ export default function ProfessionalCalculatorPage() {
               <p className="mt-2 text-4xl font-bold text-white">{currency(result.totalMonthlyExpenses)}</p>
               <div className="mt-4 h-px bg-white/10" />
               <dl className="mt-4 space-y-2 text-sm">
-                <Row label="Mortgage payment (monthly equiv.)" value={currency(result.monthlyMortgage)} />
+                <Row label="Mortgage payment" value={currency(result.monthlyMortgage)} />
                 <Row label="Property tax" value={currency(result.propertyTaxMonthly)} />
                 <Row label="Home insurance" value={currency(result.homeInsuranceNum)} />
                 <Row label="Utilities" value={currency(result.utilitiesNum)} />
-                <Row label="Condo / maintenance fees" value={currency(result.condoFeesNum)} />
+                <Row label="Condo fees" value={currency(result.condoFeesNum)} />
               </dl>
             </div>
           </aside>
@@ -456,6 +568,7 @@ function NumberField({
   step = 1,
   helper,
   readOnly = false,
+  placeholder,
 }: {
   label: string;
   value: number | string;
@@ -465,6 +578,7 @@ function NumberField({
   step?: number;
   helper?: string;
   readOnly?: boolean;
+  placeholder?: string;
 }) {
   return (
     <label className="block">
@@ -476,12 +590,13 @@ function NumberField({
           value={value}
           step={step}
           readOnly={readOnly}
+          placeholder={placeholder}
           onChange={(e) => onChange?.(e.target.value)}
-          className={`w-full bg-transparent px-3 py-2.5 text-white outline-none ${readOnly ? "cursor-default" : ""}`.trim()}
+          className={`w-full bg-transparent px-3 py-2.5 text-white outline-none ${readOnly ? "cursor-default text-slate-300" : ""}`.trim()}
         />
         {suffix && <span className="pr-3 text-slate-500">{suffix}</span>}
       </div>
-      {helper && <span className="mt-1 block text-xs text-slate-500">{helper}</span>}
+      {helper && <span className="mt-1 block text-xs text-slate-400">{helper}</span>}
     </label>
   );
 }
@@ -527,12 +642,12 @@ function Toggle({
   onChange: (v: boolean) => void;
 }) {
   return (
-    <label className="flex cursor-pointer items-center gap-2 rounded-xl border border-slate-700 bg-slate-950/80 px-3 py-2 text-sm text-slate-300">
+    <label className="flex cursor-pointer items-center gap-2 rounded-xl border border-slate-700 bg-slate-950/80 px-3 py-2.5 text-sm text-slate-300 hover:border-slate-600 transition-colors">
       <input
         type="checkbox"
         checked={checked}
         onChange={(e) => onChange(e.target.checked)}
-        className="h-4 w-4 accent-sky-500"
+        className="h-4 w-4 accent-sky-500 rounded"
       />
       {label}
     </label>
