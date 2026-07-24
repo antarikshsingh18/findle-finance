@@ -440,18 +440,7 @@ export default function ProfessionalCalculatorPage() {
               </dl>
             </div>
 
-            <WhatsAppShareButton
-              calculationData={{
-                price: currency(parseFloat(price) || 0),
-                downPayment: currency(parseFloat(downPayment) || 0),
-                dpPct: (result.dpPct * 100).toFixed(1),
-                totalMortgage: currency(result.totalMortgage),
-                frequencyLabel: FREQUENCIES.find((f) => f.value === frequency)?.label || "Monthly",
-                payment: currency(result.payment),
-                cashToClose: currency(result.cashToClose),
-                totalMonthlyExpenses: currency(result.totalMonthlyExpenses),
-              }}
-            />
+            <WhatsAppShareButton />
 
             <div className="rounded-3xl border border-white/10 bg-slate-900/60 p-6 shadow-xl">
               <h3 className="text-sm font-semibold uppercase tracking-[0.3em] text-slate-300">
@@ -667,18 +656,10 @@ function Toggle({
   );
 }
 
-function WhatsAppShareButton({ calculationData }: { calculationData: any }) {
+function WhatsAppShareButton() {
   const handleShare = () => {
-    const text = 
-      `🏠 *Mortgage Calculation Summary*\n\n` +
-      `• *Home Price:* ${calculationData.price}\n` +
-      `• *Down Payment:* ${calculationData.downPayment} (${calculationData.dpPct}%)\n` +
-      `• *Mortgage Amount:* ${calculationData.totalMortgage}\n` +
-      `• *${calculationData.frequencyLabel} Payment:* ${calculationData.payment}\n` +
-      `• *Estimated Cash to Close:* ${calculationData.cashToClose}\n` +
-      `• *Total Monthly Cost:* ${calculationData.totalMonthlyExpenses}\n\n` +
-      `Calculated via Mortgage & Home Affordability Calculator.`;
-
+    const currentUrl = window.location.href;
+    const text = `Check out this mortgage and home affordability calculator: ${currentUrl}`;
     const encodedText = encodeURIComponent(text);
     window.open(`https://wa.me/?text=${encodedText}`, "_blank");
   };
