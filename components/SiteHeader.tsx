@@ -18,7 +18,9 @@ const navItems: Array<{
     page: "calculator",
     children: [
       { href: "/Calculator", label: "Mortgage Calculator" },
-      { href: "/land-transfer-tax", label: "Land Transfer Tax" },
+      {href: "/hst", label: "GST/HST Calculator"},
+     // { href: "/land-transfer-tax", label: "Land Transfer Tax" },
+      
     ],
   },
   { href: "/compliance", label: "Compliance", page: "compliance" },
