@@ -14,6 +14,7 @@ import {
   TrendingUp,
 } from "lucide-react";
 import SiteHeader from "../components/SiteHeader";
+import Footer from "../components/Footer";
 
 // const featureCards = [
 //   {
@@ -63,10 +64,10 @@ export default function FinanceHomePage() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.45 }}
           >
-            <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-sky-400/20 bg-sky-500/10 px-3 py-1 text-sm text-sky-200">
+            {/* <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-sky-400/20 bg-sky-500/10 px-3 py-1 text-sm text-sky-200">
               <Sparkles size={16} />
               Blue-chip guidance for modern buyers
-            </div>
+            </div> */}
             <h1 className="max-w-2xl text-4xl font-semibold tracking-tight text-white sm:text-5xl">
               Mortgage clarity with <span className="text-sky-300">compliance-first calm</span>.
             </h1>
@@ -138,25 +139,7 @@ export default function FinanceHomePage() {
         </section> */}
       </main>
 
-      <footer className="relative z-10 border-t border-white/10 bg-slate-950/70">
-        <div className="mx-auto flex max-w-7xl flex-col gap-6 px-6 py-8 md:flex-row md:items-center md:justify-between lg:px-8">
-          <div className="flex items-center gap-3">
-            <Link href="/" className="flex items-center">
-            <img
-              src="/findlefinance2.png"
-              alt="Findle Finance"
-              className="h-30 w-auto max-w-[260px] object-contain opacity-90 transition-all duration-300 hover:scale-[1.02] hover:opacity-100 sm:h-32 md:h-40 lg:h-45"
-            />
-          </Link>
-          </div>
-
-          <div className="flex flex-wrap gap-4 text-sm text-slate-400">
-            <a href="/Calculator" className="transition hover:text-sky-300">Calculator</a>
-            <a href="/compliance" className="transition hover:text-sky-300">Compliance</a>
-            <a href="/blog" className="transition hover:text-sky-300">Blog</a>
-          </div>
-        </div>
-      </footer>
+      <Footer/>
     </div>
   );
 }

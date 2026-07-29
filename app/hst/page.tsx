@@ -3,6 +3,7 @@
 import React, { useMemo, useState } from "react";
 import SiteHeader from "../../components/SiteHeader";
 import { Calculator, MapPin, DollarSign, ArrowRightLeft } from "lucide-react";
+import Footer from "../../components/Footer";
 
 type ProvinceData = {
   name: string;
@@ -257,6 +258,7 @@ export default function CanadaTaxCalculatorPage() {
           </div>
         </div>
       </main>
+      <Footer/>
     </div>
   );
 }

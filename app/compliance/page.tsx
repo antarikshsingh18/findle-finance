@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ArrowRight, BadgeCheck, ShieldCheck } from "lucide-react";
 import SiteHeader from "../../components/SiteHeader";
 import {motion} from "framer-motion";
+import Footer from "../../components/Footer";
 
 export default function CompliancePage() {
   return (
@@ -125,26 +126,9 @@ export default function CompliancePage() {
           </div>
         </section>
       </main>
+      <Footer/>
 
-      <footer className="relative z-10 border-t border-white/10 bg-slate-950/70">
-        <div className="mx-auto flex max-w-7xl flex-col gap-6 px-6 py-8 md:flex-row md:items-center md:justify-between lg:px-8">
-          <div className="flex items-center gap-3">
-            <Link href="/" className="flex items-center">
-              <img
-                src="/findlefinance2.png"
-                alt="Findle Finance"
-                className="h-38 w-auto object-contain opacity-90 transition duration-300 hover:scale-[1.02] hover:opacity-100"
-              />
-            </Link>
-          </div>
-
-          <div className="flex flex-wrap gap-4 text-sm text-slate-400">
-            <Link href="/blog" className="transition hover:text-sky-300">Blog</Link>
-            <Link href="/Calculator" className="transition hover:text-sky-300">Calculator</Link>
-            <Link href="/compliance" className="font-semibold text-white">Compliance</Link>
-          </div>
-        </div>
-      </footer>
+      
     </div>
   );
 }

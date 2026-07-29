@@ -2,6 +2,7 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import SiteHeader from "../../components/SiteHeader";
+import Footer from "../../components/Footer";
 
 type PaymentFrequency =
   | "monthly"
@@ -548,6 +549,7 @@ export default function ProfessionalCalculatorPage() {
           </aside>
         </div>
       </main>
+      <Footer />
     </div>
   );
 }
@@ -654,6 +656,7 @@ function Toggle({
       {label}
     </label>
   );
+  
 }
 
 function WhatsAppShareButton() {

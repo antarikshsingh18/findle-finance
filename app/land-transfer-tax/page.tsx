@@ -3,6 +3,7 @@
 import React, { useMemo, useState } from "react";
 import SiteHeader from "../../components/SiteHeader";
 import { Calculator, MapPin, ShieldCheck, DollarSign, ArrowRightLeft } from "lucide-react";
+import Footer from "../../components/Footer";
 
 export default function LandTransferTaxComparatorPage() {
   const [purchasePrice, setPurchasePrice] = useState<string>("850000");
@@ -212,6 +213,7 @@ export default function LandTransferTaxComparatorPage() {
           </div>
         </div>
       </main>
+      <Footer/>
     </div>
   );
 }

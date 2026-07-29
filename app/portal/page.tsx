@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Upload, FileText, CheckCircle, ShieldCheck } from "lucide-react";
 import SiteHeader from "@/components/SiteHeader";
+import Footer from "@/components/Footer";
 
 export default function DocumentPortal() {
   const [file, setFile] = useState<File | null>(null);
@@ -77,6 +78,7 @@ export default function DocumentPortal() {
           )}
         </div>
       </main>
+      <Footer/>
 
       {showSuccessModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 px-4 py-6">
