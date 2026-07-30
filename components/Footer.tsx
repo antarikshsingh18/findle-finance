@@ -77,7 +77,7 @@ export default function SiteFooter() {
                   </Link>
                 </li>
                 <li>
-                  <Link href="/privacy-policy" className="hover:text-sky-400 transition-colors">
+                  <Link href="/privacy" className="hover:text-sky-400 transition-colors">
                     Privacy policy
                   </Link>
                 </li>
