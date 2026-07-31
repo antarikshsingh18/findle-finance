@@ -30,8 +30,8 @@ export default function SiteFooter() {
               <h3 className="text-xs font-semibold uppercase tracking-[0.2em] text-white">Tools</h3>
               <ul className="space-y-2.5 text-sm">
                 <li>
-                  <Link href="/mortgages" className="hover:text-sky-400 transition-colors">
-                    Mortgages
+                  <Link href="/hst" className="hover:text-sky-400 transition-colors">
+                    GST/HST
                   </Link>
                 </li>
                 <li>
@@ -49,11 +49,11 @@ export default function SiteFooter() {
                     Land transfer tax
                   </Link>
                 </li>
-                <li>
+                {/* <li>
                   <Link href="/home-valuation" className="hover:text-sky-400 transition-colors">
                     Home valuation
                   </Link>
-                </li>
+                </li> */}
               </ul>
             </div>
 
@@ -62,20 +62,21 @@ export default function SiteFooter() {
               <h3 className="text-xs font-semibold uppercase tracking-[0.2em] text-white">Company</h3>
               <ul className="space-y-2.5 text-sm">
                 <li>
+                  <Link href="/blog" className="hover:text-sky-400 transition-colors">
+                    Blog
+                  </Link>
+                </li>
+                {/* <li>
                   <Link href="/join-our-team" className="hover:text-sky-400 transition-colors">
                     Join our team
                   </Link>
-                </li>
+                </li> */}
                 <li>
-                  <Link href="/contact" className="hover:text-sky-400 transition-colors">
+                  <Link href="/bookacall" className="hover:text-sky-400 transition-colors">
                     Contact us
                   </Link>
                 </li>
-                <li>
-                  <Link href="/feedback" className="hover:text-sky-400 transition-colors">
-                    Feedback
-                  </Link>
-                </li>
+                
                 <li>
                   <Link href="/privacy" className="hover:text-sky-400 transition-colors">
                     Privacy policy
