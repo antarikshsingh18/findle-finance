@@ -31,7 +31,7 @@ export default function SiteFooter() {
               <ul className="space-y-2.5 text-sm">
                 <li>
                   <Link href="/hst" className="hover:text-sky-400 transition-colors">
-                    GST/HST
+                    GST/HST Calculator
                   </Link>
                 </li>
                 <li>
